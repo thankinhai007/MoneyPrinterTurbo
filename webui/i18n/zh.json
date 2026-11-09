@@ -691,6 +691,7 @@
     "Generation Remote Completed": "素材已生成，准备下载",
     "Generation Downloading": "正在下载素材",
     "Generation Verifying": "下载完成，正在检查视频",
+    "Generation Quality Check": "正在进行渲染前质量检查",
     "Generation Rendering": "正在合成最终视频",
     "Generation Elapsed": "已用时 {time}",
     "Generation Long Wait Hint": "生成可能需要数分钟，请耐心等待，无需重复提交。",

@@ -668,6 +668,39 @@ upload_post_max_pending_tasks = 10
 # Whisper Subtitles / Whisper 字幕
 # =============================================================================
 
+[qc]
+# Quality-control gate between material preparation and rendering.
+# Every script/term/audio/subtitle-cue/clip check counts once; rendering starts
+# only when pass_rate > pass_threshold AND no critical check failed.
+# A report is written to storage/tasks/<task_id>/qc_report.json.
+# Per-request overrides: qc_enabled, qc_pass_threshold, qc_max_retries.
+enabled = true
+pass_threshold = 0.98
+# When only footage fails (free sources pexels/pixabay/coverr), bad clips are
+# dropped first; if still failing, footage is searched again up to this many times.
+max_retries = 1
+
+# --- Picture checks (ffmpeg only, ~0.3 s per clip) ---
+visual_check = true
+max_black_ratio = 0.2   # share of a clip that may be black
+max_frozen_ratio = 0.5  # share of a clip that may be a frozen picture
+max_blur = 7.0          # ffmpeg blurdetect on a 480p proxy (sharp ~4); raise for bokeh-heavy footage
+
+# --- Character consistency (needs: pip install -r requirements-qc.txt) ---
+# Checks gender, age and skin tone of the main person in every clip against the
+# expected character. Spec source: request field qc_characters, else extracted
+# from the script by the configured LLM (auto_character_spec), else - for local
+# or AI-generated footage only - the clips must agree with each other.
+# "auto" = run when a spec exists or footage is local/AI-generated; "off" = never.
+character_check = "auto"
+auto_character_spec = true
+age_tolerance = 5       # years allowed outside the expected age range
+frames_per_clip = 4
+# Same-face check across clips (face embeddings). "auto" = local/AI footage with
+# a single character; "on" / "off" to force.
+identity_check = "auto"
+identity_threshold = 0.30
+
 [whisper]
 # The model is downloaded automatically on first use unless a matching local
 # directory exists at ./models/whisper-{model_size}.

@@ -1,0 +1,7 @@
+# Optional: character-consistency QC (gender / age / skin tone of people on screen).
+# insightface is published as a source package and needs a C++ compiler
+# (Debian/Ubuntu: apt-get install -y g++; Windows: MSVC Build Tools).
+# The face model buffalo_l (~280 MB) downloads once to ./models/insightface.
+insightface==0.7.3
+onnxruntime>=1.18
+opencv-python-headless>=4.9
