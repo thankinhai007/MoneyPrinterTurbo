@@ -167,6 +167,18 @@ class VideoParams(BaseModel):
     paragraph_number: int = Field(default=1, ge=1, le=10)
     video_script_prompt: str = Field(default="", max_length=2000)
     custom_system_prompt: str = Field(default="", max_length=8000)
+    # QC gate before rendering. None = use [qc] in config.toml.
+    qc_enabled: Optional[bool] = None
+    # Accepts 0.98 or 98. Rendering starts only when pass rate > threshold.
+    qc_pass_threshold: Optional[float] = Field(default=None, ge=0, le=100)
+    # Re-fetch stock footage this many times when QC fails (free sources only).
+    qc_max_retries: Optional[int] = Field(default=None, ge=0, le=5)
+    # Expected look of recurring characters, e.g.
+    # [{"name": "anh trai", "gender": "male", "age_min": 35, "age_max": 44,
+    #   "skin_tone": "light"}]. Empty = extract from the script with the LLM.
+    qc_characters: Optional[List[dict]] = None
+    # False = skip the character consistency check for this request.
+    qc_character_check: Optional[bool] = None
 
 
 class SubtitleRequest(BaseModel):

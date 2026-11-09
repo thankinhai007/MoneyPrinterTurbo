@@ -29,6 +29,7 @@ ENGLISH_FALLBACK_KEYS = frozenset(
         "Generation Preparing Audio",
         "Generation Preparing Subtitles",
         "Generation Preparing Materials",
+        "Generation Quality Check",
         "Generation Submitting",
         "Generation Checking",
         "Generation Remote Queued",

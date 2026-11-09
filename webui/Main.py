@@ -2078,6 +2078,7 @@ def _render_generation_activity(task):
         "audio": "Generation Preparing Audio",
         "subtitle": "Generation Preparing Subtitles",
         "materials": "Generation Preparing Materials",
+        "qc": "Generation Quality Check",
         "submitting": "Generation Submitting",
         "checking": "Generation Checking",
         "remote_queued": "Generation Remote Queued",

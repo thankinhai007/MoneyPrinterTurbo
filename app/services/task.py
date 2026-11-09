@@ -38,6 +38,7 @@ from app.services import (
     volcengine_seedance,
     voice,
 )
+from app.services import qc as qc_service
 from app.services import upload_post
 from app.services import state as sm
 from app.utils import file_security, utils
@@ -1546,6 +1547,97 @@ def _schedule_cross_post(
     return None
 
 
+# Footage sources that are free to search again. Paid generators are never
+# re-run automatically by the QC gate because each retry costs money.
+_QC_RETRYABLE_SOURCES = frozenset({"pexels", "pixabay", "coverr"})
+
+
+def _run_qc_gate(
+    task_id,
+    params: VideoParams,
+    *,
+    video_script,
+    video_terms,
+    audio_file,
+    audio_duration,
+    subtitle_path,
+    downloaded_videos,
+) -> dict:
+    """Run QC, optionally re-fetch free stock footage, and fail below threshold."""
+    max_retries = (
+        qc_service.get_max_retries(params)
+        if params.video_source in _QC_RETRYABLE_SOURCES
+        else 0
+    )
+    materials = list(downloaded_videos or [])
+    pruned: list[str] = []
+
+    def run_once(attempt):
+        report = qc_service.run(
+            task_id,
+            params,
+            video_script=video_script,
+            video_terms=video_terms,
+            audio_file=audio_file,
+            audio_duration=audio_duration,
+            subtitle_path=subtitle_path,
+            materials=materials,
+        )
+        summary = report.summary()
+        summary["attempt"] = attempt + 1
+        summary["pruned_materials"] = [path.basename(f) for f in pruned]
+        sm.state.update_task(task_id, qc=summary)
+        return report, summary
+
+    report = None
+    for attempt in range(max_retries + 1):
+        report, summary = run_once(attempt)
+        if report.passed:
+            return {"materials": materials, "qc": summary}
+
+        # Free fix first: drop the clips that failed their own check. The
+        # rendered video would then contain only clips that passed, so a
+        # re-check on the pruned set is an honest check of the render input.
+        bad_clips = report.failed_clips()
+        only_clip_failures = report.only_clip_failures()
+        if only_clip_failures:
+            kept = [f for f in materials if path.basename(f) not in bad_clips]
+            if kept and len(kept) < len(materials):
+                pruned.extend(f for f in materials if path.basename(f) in bad_clips)
+                materials = kept
+                report, summary = run_once(attempt)
+                if report.passed:
+                    logger.info(
+                        f"QC passed after pruning {len(bad_clips)} clips, task_id: {task_id}"
+                    )
+                    return {"materials": materials, "qc": summary}
+
+        # Only footage problems (per-clip technical, visual or character
+        # failures, or too little footage) can be fixed by fetching again;
+        # script/audio/subtitle failures would repeat identically.
+        non_material_failures = [
+            check for check in report.failures
+            if not check.clip and check.category != "materials"
+        ]
+        if attempt >= max_retries or non_material_failures:
+            break
+        logger.warning(
+            f"QC failed on materials (attempt {attempt + 1}/{max_retries + 1}), "
+            f"re-fetching footage, task_id: {task_id}"
+        )
+        generation_progress.stage("materials")
+        refetched = get_video_materials(task_id, params, video_terms, audio_duration)
+        if not refetched:
+            break
+        rejected = {path.realpath(f) for f in pruned}
+        materials = [f for f in refetched if path.realpath(f) not in rejected] or refetched
+        generation_progress.stage("qc")
+
+    return _mark_task_failed(
+        task_id, "qc", report.error_message(), details={"qc": report.summary()}
+    )
+
+
 def _run_pipeline(
     task_id,
     params: VideoParams,
@@ -1880,6 +1972,25 @@ def _run_pipeline(
 
     sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=50)
 
+    # 5.5 QC gate: render only when the pass rate is above the threshold.
+    qc_summary = None
+    if qc_service.is_enabled(params):
+        generation_progress.stage("qc")
+        qc_result = _run_qc_gate(
+            task_id,
+            params,
+            video_script=video_script,
+            video_terms=video_terms,
+            audio_file=audio_file,
+            audio_duration=audio_duration,
+            subtitle_path=subtitle_path,
+            downloaded_videos=downloaded_videos,
+        )
+        if qc_result.get("state") == const.TASK_STATE_FAILED:
+            return qc_result
+        downloaded_videos = qc_result["materials"]
+        qc_summary = qc_result["qc"]
+
     # 仅完整视频生成流程才需要处理视频拼接模式；
     # 这样可以避免 /subtitle 和 /audio 这类请求访问不存在的字段。
     if type(params.video_concat_mode) is str:
@@ -1951,6 +2062,7 @@ def _run_pipeline(
         "cross_post_error": None,
         "cross_post_owner": _cross_post_process_owner if should_cross_post else None,
         "warnings": generation_warnings or None,
+        "qc": qc_summary,
     }
     sm.state.update_task(
         task_id, state=const.TASK_STATE_COMPLETE, progress=100, **kwargs

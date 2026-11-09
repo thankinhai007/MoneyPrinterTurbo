@@ -691,6 +691,7 @@
     "Generation Remote Completed": "Materials generated, preparing to download",
     "Generation Downloading": "Downloading materials",
     "Generation Verifying": "Download complete, validating the video",
+    "Generation Quality Check": "Running quality check before rendering",
     "Generation Rendering": "Rendering the final video",
     "Generation Elapsed": "Elapsed: {time}",
     "Generation Long Wait Hint": "Generation may take several minutes. Please wait; there is no need to submit again.",
